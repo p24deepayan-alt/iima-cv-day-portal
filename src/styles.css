@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global Styles */
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #F9F8F4;
+    color: #1F2937;
+    height: 100%;
+}
+
+html {
+    height: 100%;
+}
+
+app-root {
+    display: block;
+    height: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: 'Playfair Display', serif;
+}
+
+/* Formal Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #002147;
+    border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #A63437;
+}
+
+/* Form inputs focus transition */
+input,
+select,
+textarea {
+    transition: all 0.2s ease-in-out;
+}

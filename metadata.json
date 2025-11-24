@@ -1,0 +1,5 @@
+{
+  "name": "IIMA CV Day Portal",
+  "description": "Placement automation tool for IIM Ahmedabad to schedule CV reviews between PGP1 and PGP2 students.",
+  "requestFramePermissions": []
+}
