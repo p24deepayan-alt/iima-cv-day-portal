@@ -297,6 +297,22 @@ interface ConfirmationConfig {
           </div>
         }
 
+         <!-- Scheduling Loading Modal -->
+         @if (isScheduling()) {
+           <div class="absolute inset-0 z-[120] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4">
+              <div class="bg-white rounded-sm shadow-2xl border-t-8 border-iima-blue animate-[fadeIn_0.2s_ease-out] p-8 max-w-md">
+                 <div class="flex flex-col items-center text-center">
+                    <div class="w-16 h-16 border-4 border-iima-blue border-t-transparent rounded-full animate-spin mb-6"></div>
+                    <h3 class="text-xl font-serif font-bold text-slate-800 mb-2">Generating Schedule...</h3>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                       Running optimization algorithm with 20 iterations.<br>
+                       This may take a few moments for large datasets.
+                    </p>
+                 </div>
+              </div>
+           </div>
+         }
+
         <!-- DAY OPERATIONS TAB (Rooms, Attendance, Feedback) -->
         @if (activeTab() === 'day_ops') {
           <div class="h-full flex flex-col overflow-hidden">
@@ -1234,16 +1250,26 @@ interface ConfirmationConfig {
                     }
                 </button>
                 
-                <button (click)="runScheduler()" class="bg-iima-blue text-white px-5 py-2.5 rounded-sm hover:bg-slate-800 shadow-md flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider">
-                   <i class="fas fa-sync-alt"></i> Run Scheduler
-                </button>
+                <button (click)="runScheduler()" 
+                         [disabled]="isScheduling() || isPublished()"
+                         class="bg-iima-blue text-white px-5 py-2.5 rounded-sm hover:bg-slate-800 shadow-md flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed">
+                    @if (isScheduling()) {
+                       <i class="fas fa-spinner fa-spin"></i> Scheduling...
+                    } @else {
+                       <i class="fas fa-sync-alt"></i> Run Scheduler
+                    }
+                 </button>
                 <button (click)="exportSchedule()" class="bg-white text-green-700 border border-green-200 px-5 py-2.5 rounded-sm hover:bg-green-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider">
                    <i class="fas fa-file-excel"></i> Export Schedule
                 </button>
-                <button (click)="runAudit()" class="bg-white text-indigo-700 border border-indigo-200 px-5 py-2.5 rounded-sm hover:bg-indigo-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider">
+                <button (click)="runAudit()" 
+                         [disabled]="isPublished()"
+                         class="bg-white text-indigo-700 border border-indigo-200 px-5 py-2.5 rounded-sm hover:bg-indigo-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed">
                    <i class="fas fa-clipboard-check"></i> Audit
                 </button>
-                <button (click)="clearSchedule()" class="bg-white text-red-600 border border-red-200 px-5 py-2.5 rounded-sm hover:bg-red-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider">
+                <button (click)="clearSchedule()" 
+                         [disabled]="isPublished()"
+                         class="bg-white text-red-600 border border-red-200 px-5 py-2.5 rounded-sm hover:bg-red-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed">
                   <i class="fas fa-trash-alt"></i> Clear Data
                 </button>
                 <button (click)="exportEmails()" class="bg-white text-slate-700 border border-slate-300 px-5 py-2.5 rounded-sm hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all text-sm font-bold uppercase tracking-wider">
@@ -1378,6 +1404,9 @@ export class AdminDashboardComponent {
    isDryRun = computed(() => this.dataService.isDryRun());
    isPublished = computed(() => this.dataService.config().isSchedulePublished);
    logs = this.dataService.logs;
+
+   // Scheduling state
+   isScheduling = signal(false);
 
    // Filters
    searchTerm = signal('');
@@ -1819,9 +1848,21 @@ export class AdminDashboardComponent {
    }
 
    runScheduler() {
-      const schedule = this.scheduler.generateSchedule();
-      this.dataService.saveSchedule(schedule);
-      this.showInfo('Success', `Schedule generated with ${schedule.length} slots.`);
+      this.isScheduling.set(true);
+
+      // Use setTimeout to allow UI to update before heavy computation
+      setTimeout(() => {
+         try {
+            const schedule = this.scheduler.generateSchedule();
+            this.dataService.saveSchedule(schedule);
+            this.showInfo('Success', `Schedule generated with ${schedule.length} slots.`);
+         } catch (error) {
+            console.error('Scheduling error:', error);
+            this.showInfo('Error', 'Failed to generate schedule. Check console for details.', 'danger');
+         } finally {
+            this.isScheduling.set(false);
+         }
+      }, 100);
    }
 
    runAudit() {
