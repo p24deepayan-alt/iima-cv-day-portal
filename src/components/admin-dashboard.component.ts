@@ -15,7 +15,7 @@ import * as XLSX from 'xlsx';
 
 type AdminTab = 'config' | 'users' | 'schedule' | 'tracking' | 'logs' | 'day_ops';
 type UserSubTab = 'pgp1' | 'pgp2';
-type DayOpsSubTab = 'rooms' | 'attendance' | 'feedback';
+type DayOpsSubTab = 'dashboard' | 'rooms' | 'attendance' | 'feedback';
 
 interface UserViewModel extends User {
    assignedSector?: string;
@@ -302,6 +302,13 @@ interface ConfirmationConfig {
           <div class="h-full flex flex-col overflow-hidden">
              <!-- Sub-Tab Navigation -->
              <div class="bg-white border-b border-slate-200 shrink-0 flex px-6">
+                <button (click)="dayOpsSubTab.set('dashboard')" 
+                   [class.border-b-2]="dayOpsSubTab() === 'dashboard'" 
+                   [class.border-iima-blue]="dayOpsSubTab() === 'dashboard'"
+                   [class.text-iima-blue]="dayOpsSubTab() === 'dashboard'"
+                   class="px-6 py-3 text-sm font-bold uppercase tracking-wide text-slate-500 hover:text-iima-blue transition-all border-transparent">
+                   <i class="fas fa-chart-bar mr-2"></i> Dashboard
+                </button>
                 <button (click)="dayOpsSubTab.set('rooms')" 
                    [class.border-b-2]="dayOpsSubTab() === 'rooms'" 
                    [class.border-iima-blue]="dayOpsSubTab() === 'rooms'"
@@ -326,6 +333,111 @@ interface ConfirmationConfig {
              </div>
 
              <div class="flex-1 overflow-hidden relative bg-slate-100">
+                <!-- DASHBOARD VIEW -->
+                @if (dayOpsSubTab() === 'dashboard') {
+                   <div class="h-full flex flex-col p-6 overflow-hidden">
+                      <!-- Header -->
+                      <div class="bg-white p-6 rounded-sm border border-slate-200 shadow-sm shrink-0 mb-6">
+                         <div class="flex justify-between items-start">
+                            <div>
+                               <h2 class="text-2xl font-serif font-bold text-iima-blue">Room Load Dashboard</h2>
+                               <p class="text-sm text-slate-500 mt-1">Real-time visualization of room occupancy across all time slots.</p>
+                            </div>
+                            @if (roomLoadData().rooms.length > 0) {
+                               <div class="grid grid-cols-3 gap-4">
+                                  <div class="text-center p-3 bg-slate-50 rounded-sm border border-slate-100">
+                                     <div class="text-2xl font-bold text-slate-700">{{ roomLoadData().totalSessions }}</div>
+                                     <div class="text-[9px] uppercase font-bold text-slate-400">Total Sessions</div>
+                                  </div>
+                                  <div class="text-center p-3 bg-blue-50 rounded-sm border border-blue-100">
+                                     <div class="text-2xl font-bold text-blue-700">{{ roomLoadData().timeSlots.length }}</div>
+                                     <div class="text-[9px] uppercase font-bold text-blue-600">Time Slots</div>
+                                  </div>
+                                  <div class="text-center p-3 bg-purple-50 rounded-sm border border-purple-100">
+                                     <div class="text-2xl font-bold text-purple-700">{{ roomLoadData().globalMaxLoad }}</div>
+                                     <div class="text-[9px] uppercase font-bold text-purple-600">Peak Load</div>
+                                  </div>
+                               </div>
+                            }
+                         </div>
+                      </div>
+
+                      @if (roomLoadData().rooms.length === 0) {
+                         <div class="flex-1 flex items-center justify-center flex-col text-slate-400">
+                            <i class="fas fa-chart-bar text-5xl mb-4 text-slate-300"></i>
+                            <p class="text-lg font-serif text-slate-600 mb-2">No Schedule Data Available</p>
+                            <p class="text-sm max-w-md text-center">Generate a schedule first to view the room load distribution.</p>
+                         </div>
+                      } @else {
+                         <!-- Load Grid -->
+                         <div class="bg-white border border-slate-200 shadow-sm rounded-sm flex-1 overflow-hidden flex flex-col">
+                            <div class="p-4 border-b border-slate-200 bg-slate-50">
+                               <h3 class="font-bold text-slate-700 uppercase text-xs tracking-wider">Load Distribution Matrix</h3>
+                            </div>
+                            <div class="overflow-auto flex-1 p-4">
+                               <table class="w-full border-collapse text-sm">
+                                  <thead>
+                                     <tr>
+                                        <th class="sticky left-0 z-20 bg-white p-3 text-left font-bold text-xs uppercase tracking-wider text-slate-500 border-b-2 border-r-2 border-slate-200">Time Slot</th>
+                                        @for (room of roomLoadData().rooms; track room.name) {
+                                           <th class="p-3 text-center font-bold text-xs uppercase tracking-wider text-slate-500 border-b-2 border-slate-200 bg-white">
+                                              <div>{{ room.name }}</div>
+                                              <div class="text-[9px] text-slate-400 font-normal mt-1">Total: {{ room.totalLoad }}</div>
+                                           </th>
+                                        }
+                                     </tr>
+                                  </thead>
+                                  <tbody>
+                                     @for (slot of roomLoadData().timeSlots; track slot; let idx = $index) {
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                           <td class="sticky left-0 z-10 bg-white p-3 font-mono font-bold text-slate-700 border-r-2 border-slate-200">{{ slot }}</td>
+                                           @for (room of roomLoadData().rooms; track room.name) {
+                                              <td class="p-3 text-center border border-slate-100" 
+                                                  [ngClass]="{
+                                                     'bg-green-50 text-green-800': room.loads[idx] === 0,
+                                                     'bg-yellow-50 text-yellow-800': room.loads[idx] > 0 && room.loads[idx] <= roomLoadData().globalMaxLoad / 2,
+                                                     'bg-orange-50 text-orange-800': room.loads[idx] > roomLoadData().globalMaxLoad / 2 && room.loads[idx] < roomLoadData().globalMaxLoad,
+                                                     'bg-red-50 text-red-800 font-bold': room.loads[idx] === roomLoadData().globalMaxLoad && roomLoadData().globalMaxLoad > 0
+                                                  }">
+                                                 @if (room.loads[idx] === 0) {
+                                                    <span class="text-slate-300 text-xs">—</span>
+                                                 } @else {
+                                                    <span class="font-bold text-lg">{{ room.loads[idx] }}</span>
+                                                 }
+                                              </td>
+                                           }
+                                        </tr>
+                                     }
+                                  </tbody>
+                               </table>
+                            </div>
+                         </div>
+
+                         <!-- Legend -->
+                         <div class="mt-4 bg-white p-4 rounded-sm border border-slate-200 shadow-sm shrink-0">
+                            <div class="flex items-center justify-center gap-6 text-xs">
+                               <div class="flex items-center gap-2">
+                                  <div class="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
+                                  <span class="text-slate-600 font-medium">No Load</span>
+                               </div>
+                               <div class="flex items-center gap-2">
+                                  <div class="w-4 h-4 bg-yellow-50 border border-yellow-200 rounded"></div>
+                                  <span class="text-slate-600 font-medium">Low Load</span>
+                               </div>
+                               <div class="flex items-center gap-2">
+                                  <div class="w-4 h-4 bg-orange-50 border border-orange-200 rounded"></div>
+                                  <span class="text-slate-600 font-medium">Medium Load</span>
+                               </div>
+                               <div class="flex items-center gap-2">
+                                  <div class="w-4 h-4 bg-red-50 border border-red-200 rounded"></div>
+                                  <span class="text-slate-600 font-medium">Peak Load</span>
+                               </div>
+                            </div>
+                         </div>
+                      }
+                   </div>
+                }
+
                 <!-- ROOMS VIEW -->
                 @if (dayOpsSubTab() === 'rooms') {
                    @if (!selectedRoomUserId()) {
@@ -1261,7 +1373,7 @@ export class AdminDashboardComponent {
 
    activeTab = signal<AdminTab>('schedule');
    userSubTab = signal<UserSubTab>('pgp1');
-   dayOpsSubTab = signal<DayOpsSubTab>('rooms');
+   dayOpsSubTab = signal<DayOpsSubTab>('dashboard');
 
    isDryRun = computed(() => this.dataService.isDryRun());
    isPublished = computed(() => this.dataService.config().isSchedulePublished);
@@ -1430,6 +1542,60 @@ export class AdminDashboardComponent {
             }
          };
       });
+   });
+
+   // Room Load Dashboard Data
+   timeSlots = computed(() => {
+      const sched = this.dataService.schedule();
+      const uniqueTimes = new Set<string>();
+      sched.forEach(item => uniqueTimes.add(item.time));
+      return Array.from(uniqueTimes).sort();
+   });
+
+   roomLoadData = computed(() => {
+      const rooms = this.dataService.rooms();
+      const sched = this.dataService.schedule();
+      const slots = this.timeSlots();
+
+      // Build a map of room -> time slot -> load count
+      const loadMap = new Map<string, Map<string, number>>();
+
+      rooms.forEach(room => {
+         const timeMap = new Map<string, number>();
+         slots.forEach(slot => timeMap.set(slot, 0));
+         loadMap.set(room.name, timeMap);
+      });
+
+      // Count sessions per room per time slot
+      sched.forEach(item => {
+         if (item.roomName && loadMap.has(item.roomName)) {
+            const timeMap = loadMap.get(item.roomName)!;
+            const current = timeMap.get(item.time) || 0;
+            timeMap.set(item.time, current + 1);
+         }
+      });
+
+      // Calculate statistics
+      let maxLoad = 0;
+      let totalLoad = 0;
+      loadMap.forEach(timeMap => {
+         timeMap.forEach(count => {
+            if (count > maxLoad) maxLoad = count;
+            totalLoad += count;
+         });
+      });
+
+      return {
+         rooms: rooms.map(room => ({
+            name: room.name,
+            loads: slots.map(slot => loadMap.get(room.name)?.get(slot) || 0),
+            totalLoad: Array.from(loadMap.get(room.name)?.values() || []).reduce((a, b) => a + b, 0),
+            maxLoad: Math.max(...Array.from(loadMap.get(room.name)?.values() || []))
+         })),
+         timeSlots: slots,
+         globalMaxLoad: maxLoad,
+         totalSessions: totalLoad
+      };
    });
 
    displayedUsers = computed(() => {

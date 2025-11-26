@@ -8,7 +8,7 @@ import { ScheduleItem, User, StudentPreferences, ReviewerAvailability, Room, Aud
   providedIn: 'root'
 })
 export class SchedulerService {
-  constructor(private dataService: DataService) {}
+  constructor(private dataService: DataService) { }
 
   generateSchedule(): ScheduleItem[] {
     const students = this.dataService.users().filter(u => u.role === 'student');
@@ -23,7 +23,7 @@ export class SchedulerService {
     for (let i = 0; i < 20; i++) {
       const shuffledStudents = this.shuffleArray([...students]);
       const result = this.runSingleIteration(shuffledStudents, prefs, reviewers, availability);
-      
+
       // Simple fitness function: count total assignments
       if (result.length > maxMatches) {
         maxMatches = result.length;
@@ -39,7 +39,7 @@ export class SchedulerService {
 
   auditSchedule(schedule: ScheduleItem[]): AuditIssue[] {
     const issues: AuditIssue[] = [];
-    
+
     if (schedule.length === 0) {
       return [{ type: 'warning', message: 'Schedule is empty. Nothing to audit.' }];
     }
@@ -74,9 +74,9 @@ export class SchedulerService {
       if (items.length > 1) {
         const times = items.map(i => this.timeToMinutes(i.time)).sort((a, b) => a - b);
         for (let i = 0; i < times.length - 1; i++) {
-          const diff = times[i+1] - times[i];
+          const diff = times[i + 1] - times[i];
           if (diff < 60) {
-             issues.push({
+            issues.push({
               type: 'error',
               entityId: s.uid,
               entityName: s.name,
@@ -130,7 +130,7 @@ export class SchedulerService {
 
     // 3. Identify Active Times per Reviewer based on generated schedule
     const reviewerActiveTimes = new Map<string, string[]>();
-    
+
     schedule.forEach(item => {
       const times = reviewerActiveTimes.get(item.reviewerId) || [];
       times.push(item.time);
@@ -145,15 +145,33 @@ export class SchedulerService {
 
     const activeReviewerIds = Array.from(reviewerActiveTimes.keys());
 
+    // Sort reviewers by number of slots (descending) to assign busier reviewers first
+    activeReviewerIds.sort((a, b) => {
+      const aSlots = reviewerActiveTimes.get(a)?.length || 0;
+      const bSlots = reviewerActiveTimes.get(b)?.length || 0;
+      return bSlots - aSlots; // Descending order
+    });
+
+    // Helper function to calculate the max load for a room
+    const calculateRoomMaxLoad = (roomId: string, occupancyMap: Map<string, number>): number => {
+      let maxLoad = 0;
+      occupancyMap.forEach(count => {
+        if (count > maxLoad) maxLoad = count;
+      });
+      return maxLoad;
+    };
+
     for (const rId of activeReviewerIds) {
       const myTimes = reviewerActiveTimes.get(rId) || [];
-      let assignedRoom: Room | null = null;
+      let bestRoom: Room | null = null;
+      let bestLoadScore = Infinity;
 
-      // Try to fit into a room
+      // Try each room and calculate what the max load would be if we assigned this reviewer
       for (const room of rooms) {
         const occupancyMap = roomOccupancy.get(room.id)!;
         let fits = true;
 
+        // Check if reviewer fits in this room
         for (const t of myTimes) {
           const currentLoad = occupancyMap.get(t) || 0;
           if (currentLoad >= maxCapacityPerRoom) {
@@ -163,22 +181,31 @@ export class SchedulerService {
         }
 
         if (fits) {
-          assignedRoom = room;
-          for (const t of myTimes) {
-            const currentLoad = occupancyMap.get(t) || 0;
-            occupancyMap.set(t, currentLoad + 1);
+          // Calculate what the max load would be if we assign this reviewer
+          const tempMaxLoad = Math.max(
+            calculateRoomMaxLoad(room.id, occupancyMap),
+            ...myTimes.map(t => (occupancyMap.get(t) || 0) + 1)
+          );
+
+          // Choose the room with the lowest resulting max load (min-max strategy)
+          if (tempMaxLoad < bestLoadScore) {
+            bestLoadScore = tempMaxLoad;
+            bestRoom = room;
           }
-          break;
         }
       }
 
-      if (assignedRoom) {
-        assignments.set(rId, assignedRoom.id);
-        this.dataService.updateUserRoomAssignment(rId, assignedRoom.id);
-      } else {
-        const fallbackRoom = rooms[0];
-        assignments.set(rId, fallbackRoom.id);
-         this.dataService.updateUserRoomAssignment(rId, fallbackRoom.id);
+      // Assign to the best room found, or fall back to first room
+      const assignedRoom = bestRoom || rooms[0];
+
+      assignments.set(rId, assignedRoom.id);
+      this.dataService.updateUserRoomAssignment(rId, assignedRoom.id);
+
+      // Update occupancy map
+      const occupancyMap = roomOccupancy.get(assignedRoom.id)!;
+      for (const t of myTimes) {
+        const currentLoad = occupancyMap.get(t) || 0;
+        occupancyMap.set(t, currentLoad + 1);
       }
     }
 
@@ -194,16 +221,16 @@ export class SchedulerService {
   }
 
   private runSingleIteration(
-    students: User[], 
-    prefs: StudentPreferences[], 
-    reviewers: User[], 
+    students: User[],
+    prefs: StudentPreferences[],
+    reviewers: User[],
     availability: ReviewerAvailability[]
   ): ScheduleItem[] {
     const schedule: ScheduleItem[] = [];
-    
+
     // Map to track assigned slots per student to enforce gap
     const studentAssignments: Map<string, number[]> = new Map();
-    
+
     // Map to track reviewer usage
     const reviewerOccupied: Set<string> = new Set();
 
@@ -211,7 +238,7 @@ export class SchedulerService {
     const isGapValid = (studentId: string, timeStr: string): boolean => {
       const assignedTimes = studentAssignments.get(studentId) || [];
       const newTimeVal = this.timeToMinutes(timeStr);
-      
+
       for (const t of assignedTimes) {
         if (Math.abs(t - newTimeVal) < 60) return false;
       }
@@ -225,12 +252,12 @@ export class SchedulerService {
 
       // Find available reviewers for this sector
       const allPossibleSlots: { rId: string, time: string }[] = [];
-      
+
       availability.forEach(avail => {
         if (avail.sector === sector) {
-           avail.slots.forEach(time => {
-              allPossibleSlots.push({ rId: avail.uid, time: time });
-           });
+          avail.slots.forEach(time => {
+            allPossibleSlots.push({ rId: avail.uid, time: time });
+          });
         }
       });
 
@@ -239,10 +266,10 @@ export class SchedulerService {
 
       for (const potential of allPossibleSlots) {
         const key = `${potential.rId}-${potential.time}`;
-        
+
         // Check if reviewer is free
         if (reviewerOccupied.has(key)) continue;
-        
+
         // Check student gap constraint
         if (!isGapValid(student.uid, potential.time)) continue;
 
@@ -253,7 +280,7 @@ export class SchedulerService {
         studentAssignments.set(student.uid, currentList);
 
         const rName = reviewers.find(r => r.uid === potential.rId)?.name || 'Unknown';
-        
+
         schedule.push({
           studentId: student.uid,
           studentName: student.name,
@@ -281,7 +308,7 @@ export class SchedulerService {
       if (p && p.p2) assignSlot(student, p.p2, 'P2');
     });
 
-     // Round 3: Preference 3
+    // Round 3: Preference 3
     students.forEach(student => {
       const p = prefs.find(x => x.uid === student.uid);
       if (p && p.p3) assignSlot(student, p.p3, 'P3');
