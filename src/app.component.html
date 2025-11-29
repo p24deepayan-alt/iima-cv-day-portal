@@ -61,7 +61,12 @@
     &copy; 2024 Indian Institute of Management Ahmedabad. All Rights Reserved.
   </footer>
   } @else {
-  <app-auth></app-auth>
+    <!-- Auth Pages -->
+    @if (authPage() === 'login') {
+      <app-login (navigateToRegister)="authPage.set('register')"></app-login>
+    } @else {
+      <app-register (navigateToLogin)="authPage.set('login')"></app-register>
+    }
   }
 </div>
 
